@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>签署 make.fun 收款授权</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #222; line-height: 1.6; }
+  h1 { font-size: 20px; }
+  pre { background: #f4f4f4; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+  button { font-size: 16px; padding: 10px 18px; margin: 6px 6px 6px 0; border-radius: 8px; border: 1px solid #888; background: #fff; cursor: pointer; }
+  button.primary { background: #222; color: #fff; border-color: #222; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #sig { background: #eef7ee; }
+  .warn { color: #b00; }
+  .ok { color: #080; }
+  code { word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>签署 make.fun 收款授权</h1>
+<p>这一步是把 make.fun 赏金的收款钱包 pin 到你的 Phantom 钱包上。签名的只会是下面这一行授权文字，不会动你的钱，也不会把私钥交出来。签完把签名发回给林野就行。</p>
+<p>授权文字：</p>
+<pre id="msg">make.fun delegation v1; Domain: make.fun; Payout: f1u3bY67vASpWDS1t13STcEwBUje2xa1XnwqwEW14qU; Agent: C2uzE5cd6MUUEYrZGbgDGZkVNA8cHTWKUU4Prq6Y73YF; Competitions: *; Nonce: 1c017839bf06a2845d20749ff65b116b; Issued At: 2026-11-23T21:47:03.282Z; Expiration Time: 2027-02-21T21:47:03.282Z</pre>
+<p>收款钱包：<code>f1u3bY67vASpWDS1t13STcEwBUje2xa1XnwqwEW14qU</code><br>
+有效期：90 天（至 2027-02-21）。只影响 pin 之后报名的赏金，之前那单新闻图不受影响。</p>
+<p><button id="connect">1. 连接 Phantom</button>
+<button id="sign" class="primary" disabled>2. 签名</button></p>
+<p id="status">请先连接 Phantom 钱包。</p>
+<p id="wallet"></p>
+<p id="sigwrap" style="display:none">签名（发回给林野）：<br><pre id="sig"></pre><button id="copy">复制签名</button></p>
+<script>
+const MESSAGE = document.getElementById('msg').textContent.trim();
+const EXPECTED = 'f1u3bY67vASpWDS1t13STcEwBUje2xa1XnwqwEW14qU';
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function bs58(bytes) {
+  let zeros = 0;
+  while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const digits = [0];
+  for (let i = zeros; i < bytes.length; i++) {
+    let carry = bytes[i];
+    for (let j = 0; j < digits.length; j++) { carry += digits[j] * 256; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+    while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  let out = '1'.repeat(zeros);
+  for (let i = digits.length - 1; i >= 0; i--) out += B58[digits[i]];
+  return out;
+}
+function provider() {
+  if (window.phantom && window.phantom.solana) return window.phantom.solana;
+  if (window.solana) return window.solana;
+  return null;
+}
+const statusEl = document.getElementById('status');
+const walletEl = document.getElementById('wallet');
+let prov = null;
+document.getElementById('connect').onclick = async () => {
+  prov = provider();
+  if (!prov) { statusEl.textContent = '没找到 Phantom 钱包。请在装了 Phantom 的浏览器里打开这个页面（电脑 Chrome 装 Phantom 扩展，或手机用 Phantom App 自带的浏览器打开）。'; statusEl.className = 'warn'; return; }
+  try {
+    const r = await prov.connect();
+    const pk = r.publicKey.toString();
+    walletEl.innerHTML = '已连接钱包：<code>' + pk + '</code>';
+    if (pk !== EXPECTED) {
+      statusEl.textContent = '连上的钱包不是 f1u3…14qU，请切换到那个钱包再签。';
+      statusEl.className = 'warn';
+      document.getElementById('sign').disabled = true;
+      return;
+    }
+    statusEl.textContent = '钱包对上了，可以签名。';
+    statusEl.className = 'ok';
+    document.getElementById('sign').disabled = false;
+  } catch (e) {
+    statusEl.textContent = '连接失败：' + (e && e.message ? e.message : e);
+    statusEl.className = 'warn';
+  }
+};
+document.getElementById('sign').onclick = async () => {
+  if (!prov) return;
+  try {
+    statusEl.textContent = '正在签名，请在 Phantom 里确认…';
+    statusEl.className = '';
+    const encoded = new TextEncoder().encode(MESSAGE);
+    const r = await prov.signMessage(encoded, 'utf8');
+    const sig = bs58(r.signature);
+    document.getElementById('sig').textContent = sig;
+    document.getElementById('sigwrap').style.display = 'block';
+    statusEl.textContent = '签好了，把下面这串签名发回给林野。';
+    statusEl.className = 'ok';
+  } catch (e) {
+    statusEl.textContent = '签名失败：' + (e && e.message ? e.message : e);
+    statusEl.className = 'warn';
+  }
+};
+document.getElementById('copy').onclick = () => {
+  const t = document.getElementById('sig').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(t);
+};
+</script>
+</body>
+</html>
